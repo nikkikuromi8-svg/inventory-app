@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>庫存管理</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; }
+
+    header { background: #2563eb; color: white; padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
+    header h1 { font-size: 20px; font-weight: 600; }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+    .tabs { display: flex; gap: 4px; margin-bottom: 24px; background: white; padding: 4px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); width: fit-content; }
+    .tab { padding: 8px 20px; border-radius: 7px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; background: transparent; color: #666; transition: all 0.15s; }
+    .tab.active { background: #2563eb; color: white; }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    .card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    .card h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #111; }
+
+    .upload-area { border: 2px dashed #d1d5db; border-radius: 10px; padding: 40px; text-align: center; cursor: pointer; transition: all 0.15s; }
+    .upload-area:hover, .upload-area.dragover { border-color: #2563eb; background: #eff6ff; }
+    .upload-area .icon { font-size: 40px; margin-bottom: 8px; }
+    .upload-area p { color: #6b7280; font-size: 14px; }
+    .upload-area p strong { color: #2563eb; }
+
+    .btn { padding: 9px 18px; border-radius: 8px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.15s; }
+    .btn-primary { background: #2563eb; color: white; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-outline { background: white; color: #374151; border: 1px solid #d1d5db; }
+    .btn-outline:hover { background: #f9fafb; }
+
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 20px; }
+    .stat { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); text-align: center; }
+    .stat .num { font-size: 32px; font-weight: 700; color: #2563eb; }
+    .stat .num.red { color: #ef4444; }
+    .stat .label { font-size: 13px; color: #6b7280; margin-top: 4px; }
+
+    .alert-banner { background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 14px 18px; margin-bottom: 20px; display: flex; align-items: flex-start; gap: 10px; }
+    .alert-banner .alert-icon { font-size: 18px; flex-shrink: 0; }
+    .alert-banner h3 { font-size: 14px; font-weight: 600; color: #991b1b; margin-bottom: 6px; }
+    .alert-table { width: 100%; border-collapse: collapse; font-size: 13px; color: #7f1d1d; }
+    .alert-table td { padding: 3px 8px 3px 0; vertical-align: top; }
+    .alert-table td:first-child { font-family: monospace; font-weight: 600; white-space: nowrap; }
+    .alert-table td:nth-child(2) { padding-right: 16px; }
+
+    .search-bar { display: flex; gap: 8px; margin-bottom: 16px; }
+    .search-bar input { flex: 1; padding: 9px 14px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; outline: none; }
+    .search-bar input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { background: #f9fafb; padding: 10px 14px; text-align: left; font-weight: 600; color: #374151; border-bottom: 1px solid #e5e7eb; }
+    td { padding: 10px 14px; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
+    tr:hover td { background: #f9fafb; }
+    .low-stock td { background: #fff7ed !important; }
+    .low-stock td:first-child { border-left: 3px solid #f97316; }
+
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 12px; font-weight: 500; }
+    .badge-red { background: #fef2f2; color: #dc2626; }
+    .badge-green { background: #f0fdf4; color: #16a34a; }
+
+    .shelf-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+    .shelf-tag { background: #eff6ff; color: #1d4ed8; padding: 2px 8px; border-radius: 5px; font-size: 12px; font-family: monospace; font-weight: 600; }
+    .shelf-tag.empty { background: #f3f4f6; color: #9ca3af; font-family: inherit; font-weight: 400; font-style: italic; }
+
+    .result-area { background: #f9fafb; border-radius: 8px; padding: 16px; margin-top: 16px; }
+    .result-area h3 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+
+    .result-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: white; border-radius: 8px; margin-bottom: 6px; border: 1px solid #e5e7eb; gap: 12px; }
+    .result-left { display: flex; flex-direction: column; gap: 3px; }
+    .result-item .sku { font-weight: 500; font-family: monospace; }
+    .result-item .shelves-info { font-size: 12px; color: #6b7280; }
+    .result-item .change { font-size: 13px; color: #6b7280; text-align: right; }
+    .result-item .change span { color: #ef4444; font-weight: 600; }
+    .result-item.not-found { border-color: #fecaca; background: #fef2f2; }
+    .result-item.not-found .sku { color: #dc2626; }
+
+    .deduct-actions { display: flex; gap: 8px; margin-top: 16px; }
+
+    .empty-state { text-align: center; padding: 60px 20px; color: #9ca3af; }
+    .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+
+    .log-item { padding: 10px 0; border-bottom: 1px solid #f3f4f6; font-size: 13px; }
+    .log-item:last-child { border-bottom: none; }
+    .log-time { color: #9ca3af; font-size: 12px; }
+    .log-detail { margin-top: 2px; }
+
+    input[type="file"] { display: none; }
+
+    .manual-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+    .manual-row input { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 7px; font-size: 14px; outline: none; }
+    .manual-row input:focus { border-color: #2563eb; }
+    .manual-row input.sku-input { flex: 2; }
+    .manual-row input.qty-input { flex: 1; }
+    .manual-row .rm-btn { background: none; border: none; cursor: pointer; color: #9ca3af; font-size: 18px; padding: 0 4px; line-height: 1; }
+    .manual-row .rm-btn:hover { color: #ef4444; }
+
+    /* Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
+    .modal { background: white; border-radius: 14px; padding: 28px; width: 440px; max-width: 90vw; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+    .modal h3 { font-size: 16px; font-weight: 600; margin-bottom: 18px; }
+    .modal label { display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 5px; margin-top: 14px; }
+    .modal input { width: 100%; padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; outline: none; }
+    .modal input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+    .modal-hint { font-size: 12px; color: #9ca3af; margin-top: 4px; }
+    .modal-actions { display: flex; gap: 8px; margin-top: 20px; justify-content: flex-end; }
+  </style>
+</head>
+<body>
+
+<header>
+  <span style="font-size:24px">📦</span>
+  <h1>庫存管理</h1>
+</header>
+
+<div class="container">
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('inventory', event)">庫存總覽</button>
+    <button class="tab" onclick="switchTab('deduct', event)">揀貨扣減</button>
+    <button class="tab" onclick="switchTab('log', event)">操作記錄</button>
+  </div>
+
+  <!-- 庫存總覽 -->
+  <div id="panel-inventory" class="panel active">
+    <div class="stats">
+      <div class="stat"><div class="num" id="stat-total">0</div><div class="label">SKU 總數</div></div>
+      <div class="stat"><div class="num red" id="stat-low">0</div><div class="label">庫存不足（&lt;10）</div></div>
+      <div class="stat"><div class="num" id="stat-units">0</div><div class="label">總庫存件數</div></div>
+    </div>
+
+    <div id="alert-container"></div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h2 style="margin:0">庫存列表</h2>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" onclick="document.getElementById('import-file').click()">📥 導入庫存</button>
+          <input type="file" id="import-file" onchange="importInventory(event)">
+          <button class="btn btn-outline" onclick="exportInventory()">📤 導出庫存</button>
+          <button class="btn btn-danger" onclick="clearInventory()">清空</button>
+        </div>
+      </div>
+      <div class="search-bar">
+        <input type="text" id="search-input" placeholder="搜索 SKU 或貨架號..." oninput="renderInventory()">
+      </div>
+      <div id="inventory-table-container">
+        <div class="empty-state">
+          <div class="icon">📋</div>
+          <p>還沒有庫存數據</p>
+          <p style="margin-top:8px;font-size:13px;">從領星導出 CSV/Excel 後點擊「導入庫存」</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 揀貨扣減 -->
+  <div id="panel-deduct" class="panel">
+    <div class="card">
+      <h2>上傳揀貨單</h2>
+      <div class="upload-area" id="upload-area" onclick="document.getElementById('picking-file').click()" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+        <div class="icon">📄</div>
+        <p><strong>點擊上傳</strong>或拖拽文件到此處</p>
+        <p style="margin-top:4px;">支持 PDF、JPG、PNG</p>
+      </div>
+      <input type="file" id="picking-file" accept=".pdf,.jpg,.jpeg,.png" onchange="handlePickingFile(event)">
+
+      <div style="margin-top:20px;">
+        <h2>手動輸入</h2>
+        <p style="font-size:13px;color:#6b7280;margin-bottom:12px;">也可以直接輸入 SKU 和數量</p>
+        <div id="manual-rows">
+          <div class="manual-row">
+            <input class="sku-input" type="text" placeholder="SKU">
+            <input class="qty-input" type="number" placeholder="數量" min="1">
+            <button class="rm-btn" onclick="removeManualRow(this)">×</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn btn-outline" onclick="addManualRow()">+ 新增一行</button>
+          <button class="btn btn-primary" onclick="previewManual()">預覽扣減</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="result-container"></div>
+  </div>
+
+  <!-- 操作記錄 -->
+  <div id="panel-log" class="panel">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h2 style="margin:0">操作記錄</h2>
+        <button class="btn btn-outline" onclick="clearLog()">清空記錄</button>
+      </div>
+      <div id="log-container">
+        <div class="empty-state"><div class="icon">📝</div><p>還沒有操作記錄</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 編輯 Modal -->
+<div id="edit-modal" class="modal-overlay" style="display:none;" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3 id="modal-title">編輯 SKU</h3>
+    <label>庫存數量</label>
+    <input id="modal-qty" type="number" min="0">
+    <label>貨架號 <span style="font-weight:400;color:#9ca3af">（多個用逗號分隔）</span></label>
+    <input id="modal-shelves" type="text" placeholder="例如：A01, B03, C12">
+    <p class="modal-hint">揀貨單上傳後會自動更新貨架號，也可以在這裡手動新增</p>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="document.getElementById('edit-modal').style.display='none'">取消</button>
+      <button class="btn btn-primary" onclick="saveModal()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// 數據結構: inventory[sku] = { qty: number, shelves: string[] }
+let inventory = {};
+let logs = JSON.parse(localStorage.getItem('logs') || '[]');
+let pendingDeductions = [];
+let editingSku = null;
+
+// 載入時遷移舊數據
+(function migrateData() {
+  const raw = JSON.parse(localStorage.getItem('inventory') || '{}');
+  for (const [sku, val] of Object.entries(raw)) {
+    if (typeof val === 'number') {
+      inventory[sku] = { qty: val, shelves: [] };
+    } else {
+      inventory[sku] = { qty: val.qty || 0, shelves: val.shelves || [] };
+    }
+  }
+})();
+
+function save() {
+  localStorage.setItem('inventory', JSON.stringify(inventory));
+  localStorage.setItem('logs', JSON.stringify(logs));
+}
+
+function getQty(sku) { return inventory[sku] ? inventory[sku].qty : undefined; }
+function getShelves(sku) { return inventory[sku] ? inventory[sku].shelves : []; }
+
+function switchTab(tab, e) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  if (e) e.target.classList.add('active');
+  document.getElementById('panel-' + tab).classList.add('active');
+  if (tab === 'inventory') renderInventory();
+  if (tab === 'log') renderLog();
+}
+
+// ── 庫存導入 ──
+let _importData = null; // 暫存待導入的原始數據
+
+function importInventory(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      let data;
+      // 統一用 array 方式讀取，相容性最好
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+      // 過濾空行
+      data = data.filter(row => row.some(c => String(c).trim() !== ''));
+      if (data.length === 0) { alert('文件是空的'); return; }
+
+      // 自動偵測欄位
+      let skuCol = -1, qtyCol = -1, shelfCol = -1, headerRow = -1;
+      for (let r = 0; r < Math.min(6, data.length); r++) {
+        const row = data[r].map(c => String(c || '').toLowerCase().trim());
+        let foundSku = -1, foundQty = -1, foundShelf = -1;
+        for (let c = 0; c < row.length; c++) {
+          if (row[c].includes('sku')) foundSku = c;
+          if (row[c].includes('數量') || row[c].includes('数量') || row[c].includes('qty') || row[c].includes('quantity') || row[c].includes('庫存') || row[c].includes('库存') || row[c].includes('在庫')) foundQty = c;
+          if (row[c].includes('貨架') || row[c].includes('货架') || row[c].includes('shelf') || row[c].includes('位置') || row[c].includes('location') || row[c].includes('儲位')) foundShelf = c;
+        }
+        if (foundSku >= 0 && foundQty >= 0) {
+          skuCol = foundSku; qtyCol = foundQty; shelfCol = foundShelf; headerRow = r;
+          break;
+        }
+      }
+
+      if (skuCol >= 0 && qtyCol >= 0) {
+        // 自動識別成功，直接導入
+        doImport(data, headerRow, skuCol, qtyCol, shelfCol);
+      } else {
+        // 無法自動識別，彈出欄位選擇介面
+        _importData = data;
+        showColumnPicker(data);
+      }
+    } catch(err) {
+      console.error(err);
+      alert('文件讀取失敗，請確認是表格格式（xlsx / csv / ods 等）');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function showColumnPicker(data) {
+  // 取前3行作為預覽
+  const preview = data.slice(0, 4);
+  const colCount = Math.max(...preview.map(r => r.length));
+  const cols = Array.from({ length: colCount }, (_, i) => {
+    const samples = preview.map(r => String(r[i] || '').trim()).filter(Boolean).slice(0, 3).join(' / ');
+    return `<option value="${i}">欄 ${i + 1}：${samples}</option>`;
+  }).join('');
+
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'col-picker-modal';
+  modal.innerHTML = `<div class="modal" onclick="event.stopPropagation()" style="width:500px">
+    <h3>請選擇對應欄位</h3>
+    <p style="font-size:13px;color:#6b7280;margin-bottom:16px;">系統無法自動識別欄位，請手動指定</p>
+    <div style="overflow-x:auto;margin-bottom:16px;">
+      <table style="font-size:12px;border-collapse:collapse;width:100%">
+        <thead><tr>${Array.from({length:colCount},(_,i)=>`<th style="padding:4px 8px;background:#f9fafb;border:1px solid #e5e7eb">欄${i+1}</th>`).join('')}</tr></thead>
+        <tbody>${preview.map(row=>`<tr>${Array.from({length:colCount},(_,i)=>`<td style="padding:4px 8px;border:1px solid #f3f4f6;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${String(row[i]||'')}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table>
+    </div>
+    <label>SKU 欄 <span style="color:#ef4444">*</span></label>
+    <select id="cp-sku" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;margin-bottom:10px">${cols}</select>
+    <label>庫存數量欄 <span style="color:#ef4444">*</span></label>
+    <select id="cp-qty" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;margin-bottom:10px"><option value="-1">— 不選 —</option>${cols}</select>
+    <label>貨架號欄 <span style="color:#6b7280;font-weight:400">（選填）</span></label>
+    <select id="cp-shelf" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;margin-bottom:4px"><option value="-1">— 不選 —</option>${cols}</select>
+    <label style="display:flex;align-items:center;gap:6px;margin-top:10px;cursor:pointer">
+      <input type="checkbox" id="cp-has-header" checked> <span style="font-weight:400;font-size:13px">第一行是標題行（跳過不導入）</span>
+    </label>
+    <div class="modal-actions" style="margin-top:20px">
+      <button class="btn btn-outline" onclick="document.getElementById('col-picker-modal').remove()">取消</button>
+      <button class="btn btn-primary" onclick="confirmColumnPicker()">確認導入</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+function confirmColumnPicker() {
+  const skuCol = parseInt(document.getElementById('cp-sku').value);
+  const qtyCol = parseInt(document.getElementById('cp-qty').value);
+  const shelfCol = parseInt(document.getElementById('cp-shelf').value);
+  const hasHeader = document.getElementById('cp-has-header').checked;
+  if (skuCol < 0) { alert('請選擇SKU欄'); return; }
+  document.getElementById('col-picker-modal').remove();
+  doImport(_importData, hasHeader ? 0 : -1, skuCol, qtyCol, shelfCol);
+  _importData = null;
+}
+
+function doImport(data, headerRow, skuCol, qtyCol, shelfCol) {
+  let imported = 0;
+  const startRow = headerRow >= 0 ? headerRow + 1 : 0;
+  for (let i = startRow; i < data.length; i++) {
+    const sku = String(data[i][skuCol] || '').trim();
+    if (!sku) continue;
+    const qty = qtyCol >= 0 ? (parseInt(data[i][qtyCol]) || 0) : 0;
+    const shelfRaw = shelfCol >= 0 ? String(data[i][shelfCol] || '').trim() : '';
+    const shelves = shelfRaw ? shelfRaw.split(/[,，;；\s]+/).map(s => s.trim()).filter(Boolean) : [];
+    if (inventory[sku]) {
+      if (qtyCol >= 0) inventory[sku].qty = qty;
+      shelves.forEach(s => { if (!inventory[sku].shelves.includes(s)) inventory[sku].shelves.push(s); });
+    } else {
+      inventory[sku] = { qty, shelves };
+    }
+    imported++;
+  }
+  save(); renderInventory(); updateStats();
+  alert(`成功導入 ${imported} 個 SKU`);
+}
+
+function exportInventory() {
+  const rows = [['SKU', '庫存數量', '貨架號']];
+  Object.entries(inventory).forEach(([sku, d]) => rows.push([sku, d.qty, d.shelves.join(', ')]));
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '庫存');
+  XLSX.writeFile(wb, `庫存_${new Date().toLocaleDateString('zh-TW').replace(/\//g,'-')}.xlsx`);
+}
+
+function clearInventory() {
+  if (!confirm('確定要清空所有庫存數據嗎？')) return;
+  inventory = {}; save(); renderInventory(); updateStats();
+}
+
+// ── 渲染庫存 ──
+function renderInventory() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  const items = Object.entries(inventory).filter(([sku, d]) =>
+    sku.toLowerCase().includes(q) || d.shelves.some(s => s.toLowerCase().includes(q))
+  );
+  const container = document.getElementById('inventory-table-container');
+
+  if (items.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="icon">📋</div><p>${q ? '找不到符合的SKU或貨架號' : '還沒有庫存數據'}</p>${!q ? '<p style="margin-top:8px;font-size:13px;">從領星導出 CSV/Excel 後點擊「導入庫存」</p>' : ''}</div>`;
+    updateStats(); renderAlerts(); return;
+  }
+
+  items.sort((a, b) => a[0].localeCompare(b[0]));
+  container.innerHTML = `<table>
+    <thead><tr><th>SKU</th><th>庫存數量</th><th>貨架號</th><th>狀態</th><th>操作</th></tr></thead>
+    <tbody>${items.map(([sku, d]) => {
+      const low = d.qty < 10;
+      const shelfHtml = d.shelves.length
+        ? d.shelves.map(s => `<span class="shelf-tag">${s}</span>`).join('')
+        : `<span class="shelf-tag empty">未設定</span>`;
+      return `<tr class="${low ? 'low-stock' : ''}">
+        <td style="font-family:monospace;font-weight:500">${sku}</td>
+        <td><strong>${d.qty}</strong></td>
+        <td><div class="shelf-tags">${shelfHtml}</div></td>
+        <td>${low ? '<span class="badge badge-red">庫存不足</span>' : '<span class="badge badge-green">正常</span>'}</td>
+        <td><button class="btn btn-outline" style="padding:4px 10px;font-size:12px;" onclick="openModal('${sku}')">編輯</button></td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+
+  updateStats(); renderAlerts();
+}
+
+// ── Modal 編輯 ──
+function openModal(sku) {
+  editingSku = sku;
+  document.getElementById('modal-title').textContent = `編輯：${sku}`;
+  document.getElementById('modal-qty').value = inventory[sku].qty;
+  document.getElementById('modal-shelves').value = inventory[sku].shelves.join(', ');
+  document.getElementById('edit-modal').style.display = 'flex';
+}
+function closeModal(e) {
+  if (e.target === document.getElementById('edit-modal')) document.getElementById('edit-modal').style.display = 'none';
+}
+function saveModal() {
+  const qty = parseInt(document.getElementById('modal-qty').value);
+  if (isNaN(qty) || qty < 0) { alert('請輸入有效數量'); return; }
+  const shelvesRaw = document.getElementById('modal-shelves').value;
+  const shelves = shelvesRaw.split(/[,，;；\s]+/).map(s => s.trim()).filter(Boolean);
+  const old = inventory[editingSku].qty;
+  inventory[editingSku] = { qty, shelves };
+  save(); renderInventory();
+  addLog('手動修改', [{ sku: editingSku, before: old, after: qty, deducted: old - qty, shelves }]);
+  document.getElementById('edit-modal').style.display = 'none';
+}
+
+function updateStats() {
+  const vals = Object.values(inventory);
+  document.getElementById('stat-total').textContent = vals.length;
+  document.getElementById('stat-low').textContent = vals.filter(v => v.qty < 10).length;
+  document.getElementById('stat-units').textContent = vals.reduce((a, b) => a + b.qty, 0);
+}
+
+function renderAlerts() {
+  const low = Object.entries(inventory).filter(([, d]) => d.qty < 10);
+  const container = document.getElementById('alert-container');
+  if (low.length === 0) { container.innerHTML = ''; return; }
+  const rows = low.map(([sku, d]) => {
+    const shelfStr = d.shelves.length ? d.shelves.join('、') : '未設定貨架';
+    return `<tr><td>${sku}</td><td>剩 ${d.qty} 件</td><td>📍 ${shelfStr}</td></tr>`;
+  }).join('');
+  container.innerHTML = `<div class="alert-banner">
+    <div class="alert-icon">⚠️</div>
+    <div style="width:100%">
+      <h3>需要合併庫存 / 清點（${low.length} 個SKU庫存不足）</h3>
+      <table class="alert-table">${rows}</table>
+    </div>
+  </div>`;
+}
+
+// ── 揀貨單解析 ──
+function onDragOver(e) { e.preventDefault(); document.getElementById('upload-area').classList.add('dragover'); }
+function onDragLeave() { document.getElementById('upload-area').classList.remove('dragover'); }
+function onDrop(e) { e.preventDefault(); onDragLeave(); const f = e.dataTransfer.files[0]; if (f) processFile(f); }
+function handlePickingFile(e) { const f = e.target.files[0]; if (f) processFile(f); e.target.value = ''; }
+
+async function processFile(file) {
+  const container = document.getElementById('result-container');
+  container.innerHTML = `<div class="card"><p style="color:#6b7280">解析中...</p></div>`;
+  try {
+    let text = file.type === 'application/pdf' ? await extractPdfText(file) : await extractImageText(file);
+    const items = parsePickingList(text);
+    if (items.length === 0) {
+      // 顯示原始文字方便除錯
+      container.innerHTML = `<div class="card">
+        <p style="color:#ef4444;font-weight:500;margin-bottom:12px">未能識別到任何SKU</p>
+        <p style="font-size:13px;color:#6b7280;margin-bottom:8px">PDF 提取到的原始文字（請截圖給我看）：</p>
+        <pre style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;font-size:12px;overflow-x:auto;white-space:pre-wrap;max-height:300px;overflow-y:auto">${text.replace(/</g,'&lt;').slice(0, 3000)}</pre>
+      </div>`;
+      return;
+    }
+    showDeductPreview(items);
+  } catch(err) {
+    container.innerHTML = `<div class="card"><p style="color:#ef4444">解析失敗：${err.message}</p></div>`;
+  }
+}
+
+async function extractPdfText(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+  // 提取所有文字加座標
+  let allItems = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const viewport = page.getViewport({ scale: 1 });
+    content.items.forEach(item => {
+      if (item.str.trim()) {
+        allItems.push({
+          str: item.str.trim(),
+          x: Math.round(item.transform[4]),
+          y: Math.round(viewport.height - item.transform[5])
+        });
+      }
+    });
+  }
+
+  // 按 Y 分組（差距 < 5px 算同一行），再按 X 排序
+  allItems.sort((a, b) => a.y - b.y || a.x - b.x);
+  const rows = [];
+  let currentRow = [];
+  let lastY = -9999;
+  for (const item of allItems) {
+    if (item.y - lastY > 5 && currentRow.length > 0) {
+      rows.push(currentRow);
+      currentRow = [];
+    }
+    currentRow.push(item);
+    lastY = item.y;
+  }
+  if (currentRow.length > 0) rows.push(currentRow);
+
+  // 同時保存結構化版本供解析
+  window._pdfRows = rows;
+
+  const text = rows.map(row => row.map(i => i.str).join('\t')).join('\n');
+  return text;
+}
+
+async function extractImageText(file) {
+  if (!window.Tesseract) {
+    await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+  }
+  const result = await Tesseract.recognize(file, 'chi_sim+eng');
+  return result.data.text;
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+// 解析揀貨單：SKU + 貨架號 + 揀貨數量
+// 常見格式: "SKU-123  A01  5" 或 "SKU-123  5"
+function parsePickingList(text) {
+  const lines = text.split(/[\n\r]+/).map(l => l.trim()).filter(Boolean);
+  const items = {};
+
+  // ── 座標解析（最準確）──
+  if (window._pdfRows && window._pdfRows.length > 0) {
+    const rows = window._pdfRows;
+
+    // 找標題行：含 location、sku、qty
+    let headerRow = null;
+    let locX = -1, skuX = -1, qtyX = -1;
+    for (const row of rows) {
+      const rowText = row.map(i => i.str.toLowerCase()).join(' ');
+      if (/location/.test(rowText) && /sku/.test(rowText) && /qty/.test(rowText)) {
+        headerRow = row;
+        row.forEach(item => {
+          const t = item.str.toLowerCase();
+          if (t === 'location') locX = item.x;
+          if (t === 'sku') skuX = item.x;
+          if (t === 'qty') qtyX = item.x;
+        });
+        break;
+      }
+    }
+
+    if (headerRow && skuX >= 0 && qtyX >= 0) {
+      const locationPattern = /^\d{2,3}-\d{2,3}-\d{2,3}$/;
+      // 數據行：Y 在標題行之後，且包含 location 格式的 token
+      for (const row of rows) {
+        if (row[0].y <= headerRow[0].y) continue;
+        // 按 X 位置分配到各欄（容差 ±60px）
+        const getCell = (targetX) => row
+          .filter(i => Math.abs(i.x - targetX) < 80)
+          .map(i => i.str).join(' ').trim();
+
+        const shelf = locX >= 0 ? getCell(locX) : row.find(i => locationPattern.test(i.str))?.str;
+        const sku = getCell(skuX);
+        const qtyStr = getCell(qtyX);
+        const qty = parseInt(qtyStr);
+
+        if (sku && qty > 0 && qty < 10000) {
+          if (items[sku]) {
+            items[sku].qty += qty;
+          } else {
+            items[sku] = { qty, shelf: shelf || null };
+          }
+        }
+      }
+
+      return Object.entries(items).map(([sku, d]) => ({ sku, qty: d.qty, shelf: d.shelf }));
+    }
+  }
+
+  // ── 格式偵測：Pick List (By Location) ──
+  const isPickListFormat = lines.some(l => /location/i.test(l) && /sku/i.test(l) && /qty/i.test(l));
+
+  if (isPickListFormat) {
+    const locationPattern = /^\d{2,3}-\d{2,3}-\d{2,3}$/;
+
+    for (const line of lines) {
+      // 先嘗試 tab 分隔（我們的提取器用 tab 分欄）
+      const cells = line.split('\t').map(c => c.trim()).filter(Boolean);
+
+      let shelf = null, sku = null, qty = null;
+
+      if (cells.length >= 3) {
+        // 找 location 欄
+        const locIdx = cells.findIndex(c => locationPattern.test(c));
+        // 找 qty 欄（最後一個純數字）
+        let qtyIdx = -1;
+        for (let i = cells.length - 1; i >= 0; i--) {
+          if (/^\d{1,5}$/.test(cells[i])) { qtyIdx = i; break; }
+        }
+        if (locIdx >= 0 && qtyIdx > locIdx) {
+          shelf = cells[locIdx];
+          qty = parseInt(cells[qtyIdx]);
+          // SKU: location 和 qty 之間，去重
+          const middle = cells.slice(locIdx + 1, qtyIdx);
+          sku = extractRepeatedSku(middle.join(' ').split(/\s+/));
+        }
+      }
+
+      // tab 分隔失敗，退回空格分隔
+      if (!sku) {
+        const tokens = line.split(/\s+/).filter(Boolean);
+        if (tokens.length < 3) continue;
+        if (!locationPattern.test(tokens[0])) continue;
+        shelf = tokens[0];
+        qty = parseInt(tokens[tokens.length - 1]);
+        if (isNaN(qty) || qty <= 0) continue;
+        const middle = tokens.slice(1, tokens.length - 1);
+        sku = extractRepeatedSku(middle);
+      }
+
+      if (!sku || sku.length < 2 || !qty || qty <= 0) continue;
+
+      if (items[sku]) {
+        items[sku].qty += qty;
+        if (!items[sku].shelf) items[sku].shelf = shelf;
+      } else {
+        items[sku] = { qty, shelf };
+      }
+    }
+  }
+
+  // ── 通用備用解析（找不到 Pick List 格式時）──
+  if (Object.keys(items).length === 0) {
+    const pickingOrderPattern = /^W\d{6,}\w{1,4}$/;
+    const datePattern = /^\d{4}[-\/]\d{2}[-\/]\d{2}$|^\d{8}$/;
+    const skipKeywords = ['揀貨單', '單號', '倉庫', '備註', '合計', '總計', '打印', '日期', 'page', 'pick list', 'picker', 'wave', 'total', 'barcode', 'item name'];
+
+    for (const line of lines) {
+      if (skipKeywords.some(kw => line.toLowerCase().includes(kw))) continue;
+      const m3 = /^(.+?)\s{1,}([A-Za-z]{1,3}\d{1,4}(?:-\d+)?)\s{1,}(\d{1,5})\s*$/.exec(line);
+      if (m3) {
+        const sku = m3[1].trim(), shelf = m3[2], qty = parseInt(m3[3]);
+        if (!pickingOrderPattern.test(sku) && !datePattern.test(sku) && isNaN(Number(sku)) && sku.length >= 2 && qty > 0) {
+          if (!items[sku]) items[sku] = { qty, shelf };
+          continue;
+        }
+      }
+      const m2 = /^(.+?)\s{2,}(\d{1,5})\s*$/.exec(line);
+      if (m2) {
+        const sku = m2[1].trim(), qty = parseInt(m2[2]);
+        if (!pickingOrderPattern.test(sku) && !datePattern.test(sku) && isNaN(Number(sku)) && sku.length >= 2 && qty > 0) {
+          if (!items[sku]) items[sku] = { qty, shelf: null };
+        }
+      }
+    }
+  }
+
+  return Object.entries(items).map(([sku, d]) => ({ sku, qty: d.qty, shelf: d.shelf }));
+}
+
+// 從重複的 token 陣列中提取原始 SKU
+// 例如 ["N18","powerbank","N18","powerbank","N18","powerbank"] → "N18 powerbank"
+// 例如 ["X004VPG6S1","X004VPG6S1","X004VPG6S1"] → "X004VPG6S1"
+function extractRepeatedSku(tokens) {
+  const total = tokens.length;
+  // 嘗試 1/3、1/2、全部
+  for (const divisor of [3, 2, 1]) {
+    if (total % divisor !== 0) continue;
+    const unitLen = total / divisor;
+    const candidate = tokens.slice(0, unitLen).join(' ');
+    if (divisor === 1) return candidate;
+    // 驗證是否真的重複
+    let isRepeat = true;
+    for (let i = 1; i < divisor; i++) {
+      if (tokens.slice(i * unitLen, (i + 1) * unitLen).join(' ') !== candidate) {
+        isRepeat = false; break;
+      }
+    }
+    if (isRepeat) return candidate;
+  }
+  // 無法判斷重複，返回前半部分
+  return tokens.slice(0, Math.ceil(total / 2)).join(' ');
+}
+
+function showDeductPreview(parsedItems) {
+  const manualItems = getManualItems();
+  // merge: parsed items take shelf info, manual items don't
+  const allMap = {};
+  parsedItems.forEach(({ sku, qty, shelf }) => {
+    allMap[sku] = { qty: (allMap[sku]?.qty || 0) + qty, shelf: shelf || allMap[sku]?.shelf || null };
+  });
+  manualItems.forEach(({ sku, qty }) => {
+    allMap[sku] = { qty: (allMap[sku]?.qty || 0) + qty, shelf: allMap[sku]?.shelf || null };
+  });
+
+  const allItems = Object.entries(allMap).map(([sku, d]) => ({ sku, ...d }));
+  pendingDeductions = allItems;
+
+  const container = document.getElementById('result-container');
+  if (allItems.length === 0) {
+    container.innerHTML = `<div class="card"><p style="color:#ef4444">未能識別到任何SKU，請嘗試手動輸入</p></div>`;
+    return;
+  }
+
+  const html = allItems.map(item => {
+    const d = inventory[item.sku];
+    const found = d !== undefined;
+    const after = found ? Math.max(0, d.qty - item.qty) : null;
+    const currentShelves = found ? d.shelves : [];
+    const newShelf = item.shelf && !currentShelves.includes(item.shelf) ? item.shelf : null;
+    const shelfDisplay = item.shelf ? `📍 ${item.shelf}${newShelf ? ' <span style="color:#f59e0b;font-size:11px;">（新貨架）</span>' : ''}` : '';
+
+    return `<div class="result-item ${!found ? 'not-found' : ''}">
+      <div class="result-left">
+        <span class="sku">${item.sku}</span>
+        ${shelfDisplay ? `<span class="shelves-info">${shelfDisplay}</span>` : ''}
+        ${found && currentShelves.length ? `<span class="shelves-info" style="color:#9ca3af">現有貨架：${currentShelves.join('、')}</span>` : ''}
+      </div>
+      <span class="change">
+        ${found
+          ? `${d.qty} → <span>${after}</span>（扣 ${item.qty}）${after < 10 ? ' ⚠️' : ''}`
+          : '未找到此SKU'}
+      </span>
+    </div>`;
+  }).join('');
+
+  container.innerHTML = `<div class="card">
+    <div class="result-area">
+      <h3>識別結果（${allItems.length} 個SKU）</h3>
+      ${html}
+    </div>
+    <p style="font-size:12px;color:#9ca3af;margin-top:10px;">* 揀貨單上的貨架號會自動更新到庫存記錄</p>
+    <div class="deduct-actions">
+      <button class="btn btn-primary" onclick="confirmDeduct()">確認扣減</button>
+      <button class="btn btn-outline" onclick="document.getElementById('result-container').innerHTML=''">取消</button>
+    </div>
+  </div>`;
+}
+
+function getManualItems() {
+  const rows = document.querySelectorAll('.manual-row');
+  const items = [];
+  rows.forEach(row => {
+    const sku = row.querySelector('.sku-input').value.trim();
+    const qty = parseInt(row.querySelector('.qty-input').value);
+    if (sku && qty > 0) items.push({ sku, qty });
+  });
+  return items;
+}
+
+function addManualRow() {
+  const div = document.createElement('div');
+  div.className = 'manual-row';
+  div.innerHTML = `<input class="sku-input" type="text" placeholder="SKU"><input class="qty-input" type="number" placeholder="數量" min="1"><button class="rm-btn" onclick="removeManualRow(this)">×</button>`;
+  document.getElementById('manual-rows').appendChild(div);
+}
+
+function removeManualRow(btn) {
+  const rows = document.querySelectorAll('.manual-row');
+  if (rows.length > 1) btn.parentElement.remove();
+  else { btn.parentElement.querySelector('.sku-input').value = ''; btn.parentElement.querySelector('.qty-input').value = ''; }
+}
+
+function previewManual() {
+  showDeductPreview([]);
+}
+
+function confirmDeduct() {
+  if (pendingDeductions.length === 0) return;
+  const changes = [];
+  pendingDeductions.forEach(({ sku, qty, shelf }) => {
+    if (inventory[sku] !== undefined) {
+      const before = inventory[sku].qty;
+      inventory[sku].qty = Math.max(0, before - qty);
+      // 自動更新貨架號
+      if (shelf && !inventory[sku].shelves.includes(shelf)) {
+        inventory[sku].shelves.push(shelf);
+      }
+      changes.push({ sku, before, after: inventory[sku].qty, deducted: qty, shelves: inventory[sku].shelves });
+    }
+  });
+  save();
+  addLog('揀貨扣減', changes);
+  pendingDeductions = [];
+  document.getElementById('result-container').innerHTML = `<div class="card"><p style="color:#16a34a;font-weight:500">✅ 已成功扣減 ${changes.length} 個SKU的庫存，貨架號已更新</p></div>`;
+  updateStats(); renderAlerts();
+  document.getElementById('manual-rows').innerHTML = `<div class="manual-row"><input class="sku-input" type="text" placeholder="SKU"><input class="qty-input" type="number" placeholder="數量" min="1"><button class="rm-btn" onclick="removeManualRow(this)">×</button></div>`;
+}
+
+// ── 記錄 ──
+function addLog(action, changes) {
+  logs.unshift({ time: new Date().toISOString(), action, changes });
+  if (logs.length > 200) logs = logs.slice(0, 200);
+  save();
+}
+
+function renderLog() {
+  const container = document.getElementById('log-container');
+  if (logs.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="icon">📝</div><p>還沒有操作記錄</p></div>`;
+    return;
+  }
+  container.innerHTML = logs.map(log => {
+    const d = new Date(log.time);
+    const timeStr = `${d.toLocaleDateString('zh-TW')} ${d.toLocaleTimeString('zh-TW')}`;
+    const detail = log.changes.map(c => {
+      const shelfStr = c.shelves && c.shelves.length ? ` [${c.shelves.join('/')}]` : '';
+      return `${c.sku}${shelfStr}: ${c.before}→${c.after}（-${c.deducted}）`;
+    }).join('、');
+    return `<div class="log-item">
+      <div class="log-time">${timeStr} · ${log.action}</div>
+      <div class="log-detail">${detail}</div>
+    </div>`;
+  }).join('');
+}
+
+function clearLog() {
+  if (!confirm('確定要清空操作記錄嗎？')) return;
+  logs = []; save(); renderLog();
+}
+
+// ── 初始化 ──
+updateStats(); renderInventory(); renderAlerts();
+</script>
+</body>
+</html>
