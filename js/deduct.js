@@ -92,6 +92,6 @@ function confirmDeduct() {
   addLog('揀貨扣減', changes);
   pendingDeductions = [];
   document.getElementById('result-container').innerHTML = `<div class="card"><p style="color:#16a34a;font-weight:500">✅ 已成功扣減 ${changes.length} 個SKU的庫存，貨架號已更新</p></div>`;
-  updateStats(); renderAlerts();
+  updateStats(); renderAlerts(); renderInventory();
   document.getElementById('manual-rows').innerHTML = `<div class="manual-row"><input class="sku-input" type="text" placeholder="SKU"><input class="qty-input" type="number" placeholder="數量" min="1"><button class="rm-btn" onclick="removeManualRow(this)">×</button></div>`;
 }
