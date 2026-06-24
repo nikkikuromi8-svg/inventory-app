@@ -96,6 +96,7 @@ function confirmColumnPicker() {
 
 function doImport(data, headerRow, skuCol, qtyCol, shelfCol) {
   let imported = 0;
+  const nextInventory = {};
   const startRow = headerRow >= 0 ? headerRow + 1 : 0;
   for (let i = startRow; i < data.length; i++) {
     const sku = String(data[i][skuCol] || '').trim();
@@ -103,21 +104,21 @@ function doImport(data, headerRow, skuCol, qtyCol, shelfCol) {
     const qty = qtyCol >= 0 ? (parseInt(data[i][qtyCol]) || 0) : 0;
     const shelfRaw = shelfCol >= 0 ? String(data[i][shelfCol] || '').trim() : '';
     const shelves = shelfRaw ? shelfRaw.split(/[,，;；\s]+/).map(s => s.trim()).filter(Boolean) : [];
-    if (!inventory[sku]) inventory[sku] = { qty: 0, shelves: [], locations: {} };
-    if (!inventory[sku].locations) inventory[sku].locations = {};
+    if (!nextInventory[sku]) nextInventory[sku] = { qty: 0, shelves: [], locations: {} };
 
     if (shelves.length > 0) {
-      shelves.forEach(s => { inventory[sku].locations[s] = qty; });
-      recalcSkuQty(sku);
+      shelves.forEach(s => { nextInventory[sku].locations[s] = qty; });
     } else if (qtyCol >= 0) {
-      inventory[sku].qty = qty;
+      nextInventory[sku].qty = qty;
     }
-    inventory[sku].shelves = Array.from(new Set([
-      ...(inventory[sku].shelves || []),
+    nextInventory[sku].shelves = Array.from(new Set([
+      ...(nextInventory[sku].shelves || []),
       ...shelves
     ]));
     imported++;
   }
+  inventory = nextInventory;
+  Object.keys(inventory).forEach(recalcSkuQty);
   save(); renderInventory(); updateStats();
-  alert(`成功導入 ${imported} 個 SKU`);
+  alert(`成功導入 ${imported} 行庫存，已用新文件覆蓋舊庫存`);
 }
