@@ -2,6 +2,7 @@
 let inventory = {};
 let logs = JSON.parse(localStorage.getItem('logs') || '[]');
 let pendingDeductions = [];
+let pendingPickingOrderNo = '';
 let editingSku = null;
 let _importData = null;
 

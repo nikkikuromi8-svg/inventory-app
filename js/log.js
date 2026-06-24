@@ -1,6 +1,6 @@
 // ── 操作記錄 ──
-function addLog(action, changes) {
-  logs.unshift({ time: new Date().toISOString(), action, changes });
+function addLog(action, changes, meta = {}) {
+  logs.unshift({ time: new Date().toISOString(), action, changes, ...meta });
   if (logs.length > 200) logs = logs.slice(0, 200);
   save();
 }
@@ -18,8 +18,9 @@ function renderLog() {
       const shelfStr = c.shelves && c.shelves.length ? ` [${c.shelves.join('/')}]` : '';
       return `${c.sku}${shelfStr}: ${c.before}→${c.after}（-${c.deducted}）`;
     }).join('、');
+    const orderNo = log.orderNo ? ` · 揀貨單號：${log.orderNo}` : '';
     return `<div class="log-item">
-      <div class="log-time">${timeStr} · ${log.action}</div>
+      <div class="log-time">${timeStr} · ${log.action}${orderNo}</div>
       <div class="log-detail">${detail}</div>
     </div>`;
   }).join('');

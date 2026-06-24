@@ -11,6 +11,7 @@ async function processFile(file) {
     const text = file.type === 'application/pdf'
       ? await extractPdfText(file)
       : await extractImageText(file);
+    pendingPickingOrderNo = extractPickingOrderNo(text);
     const items = parsePickingList(text);
     if (items.length === 0) {
       container.innerHTML = `<div class="card">
@@ -67,10 +68,13 @@ function showDeductPreview(parsedItems) {
       </span>
     </div>`;
   }).join('');
+  const orderNoHtml = pendingPickingOrderNo
+    ? `<p style="font-size:13px;color:#2563eb;font-weight:600;margin-bottom:10px;">揀貨單號：${pendingPickingOrderNo}</p>`
+    : '';
 
   container.innerHTML = `<div class="card">
     <div class="result-area">
-      <h3>識別結果（${allItems.length} 個SKU）</h3>${html}
+      <h3>識別結果（${allItems.length} 個SKU）</h3>${orderNoHtml}${html}
     </div>
     <p style="font-size:12px;color:#9ca3af;margin-top:10px;">* 揀貨單上的貨架號會自動更新到庫存記錄</p>
     <div class="deduct-actions">
@@ -103,9 +107,16 @@ function confirmDeduct() {
     }
   });
   save();
-  addLog('揀貨扣減', changes);
+  addLog('揀貨扣減', changes, { orderNo: pendingPickingOrderNo });
   pendingDeductions = [];
-  document.getElementById('result-container').innerHTML = `<div class="card"><p style="color:#16a34a;font-weight:500">✅ 已成功扣減 ${changes.length} 個SKU的庫存，貨架號已更新</p></div>`;
+  const orderText = pendingPickingOrderNo ? `（揀貨單號：${pendingPickingOrderNo}）` : '';
+  pendingPickingOrderNo = '';
+  document.getElementById('result-container').innerHTML = `<div class="card"><p style="color:#16a34a;font-weight:500">✅ 已成功扣減 ${changes.length} 個SKU的庫存${orderText}，貨架號已更新</p></div>`;
   updateStats(); renderAlerts(); renderInventory();
   document.getElementById('manual-rows').innerHTML = `<div class="manual-row"><input class="sku-input" type="text" placeholder="SKU"><input class="qty-input" type="number" placeholder="數量" min="1"><button class="rm-btn" onclick="removeManualRow(this)">×</button></div>`;
+}
+
+function extractPickingOrderNo(text) {
+  const match = text.match(/\bW\d{6,}[A-Za-z0-9]{1,4}\b/);
+  return match ? match[0] : '';
 }

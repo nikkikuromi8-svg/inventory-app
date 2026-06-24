@@ -114,6 +114,7 @@ const requiredFunctions = [
   'function onDrop',
   'function handlePickingFile',
   'function processFile',
+  'function extractPickingOrderNo',
   'function showDeductPreview',
   'function confirmDeduct',
   // log.js
