@@ -31,6 +31,7 @@ console.log('\n【1】文件存在檢查');
 const requiredFiles = [
   'index.html',
   'css/styles.css',
+  'css/components.css',
   'js/store.js',
   'js/import.js',
   'js/inventory.js',
@@ -53,6 +54,7 @@ requiredFiles.forEach(f => {
 console.log('\n【3】index.html 引用檢查');
 const html = readFile('index.html') || '';
 check('引用 css/styles.css',    html.includes('css/styles.css'));
+check('引用 css/components.css', html.includes('css/components.css'));
 check('引用 js/store.js',       html.includes('js/store.js'));
 check('引用 js/log.js',         html.includes('js/log.js'));
 check('引用 js/ui.js',          html.includes('js/ui.js'));
@@ -85,6 +87,7 @@ const requiredFunctions = [
   'function save',
   'function getQty',
   'function getShelves',
+  'function recalcSkuQty',
   // import.js
   'function importInventory',
   'function showColumnPicker',
@@ -98,6 +101,7 @@ const requiredFunctions = [
   'function closeModal',
   'function saveModal',
   'function updateStats',
+  'function getLowStockRows',
   'function renderAlerts',
   // parser.js
   'function extractPdfText',
@@ -127,7 +131,7 @@ requiredFunctions.forEach(fn => check(fn, allJs.includes(fn)));
 
 // ── 6. 關鍵 CSS 類名是否存在 ──
 console.log('\n【6】關鍵 CSS 類名檢查');
-const css = readFile('css/styles.css') || '';
+const css = `${readFile('css/styles.css') || ''}\n${readFile('css/components.css') || ''}`;
 const requiredClasses = [
   '.tab', '.panel', '.card', '.btn', '.btn-primary', '.btn-danger', '.btn-outline',
   '.stats', '.stat', '.alert-banner', '.alert-table',

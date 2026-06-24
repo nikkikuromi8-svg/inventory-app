@@ -30,13 +30,15 @@ async function processFile(file) {
 function showDeductPreview(parsedItems) {
   const allMap = {};
   parsedItems.forEach(({ sku, qty, shelf }) => {
-    allMap[sku] = { qty: (allMap[sku]?.qty || 0) + qty, shelf: shelf || allMap[sku]?.shelf || null };
+    const key = `${sku}||${shelf || ''}`;
+    allMap[key] = { sku, qty: (allMap[key]?.qty || 0) + qty, shelf: shelf || null };
   });
   getManualItems().forEach(({ sku, qty }) => {
-    allMap[sku] = { qty: (allMap[sku]?.qty || 0) + qty, shelf: allMap[sku]?.shelf || null };
+    const key = `${sku}||`;
+    allMap[key] = { sku, qty: (allMap[key]?.qty || 0) + qty, shelf: null };
   });
 
-  const allItems = Object.entries(allMap).map(([sku, d]) => ({ sku, ...d }));
+  const allItems = Object.values(allMap);
   pendingDeductions = allItems;
 
   const container = document.getElementById('result-container');
@@ -48,7 +50,9 @@ function showDeductPreview(parsedItems) {
   const html = allItems.map(item => {
     const d = inventory[item.sku];
     const found = d !== undefined;
-    const after = found ? Math.max(0, d.qty - item.qty) : null;
+    const locQty = found && item.shelf && d.locations ? d.locations[item.shelf] : undefined;
+    const beforeQty = locQty !== undefined ? locQty : (found ? d.qty : null);
+    const after = found ? Math.max(0, beforeQty - item.qty) : null;
     const currentShelves = found ? d.shelves : [];
     const newShelf = item.shelf && !currentShelves.includes(item.shelf) ? item.shelf : null;
     const shelfDisplay = item.shelf ? `📍 ${item.shelf}${newShelf ? ' <span style="color:#f59e0b;font-size:11px;">（新貨架）</span>' : ''}` : '';
@@ -59,7 +63,7 @@ function showDeductPreview(parsedItems) {
         ${found && currentShelves.length ? `<span class="shelves-info" style="color:#9ca3af">現有貨架：${currentShelves.join('、')}</span>` : ''}
       </div>
       <span class="change">
-        ${found ? `${d.qty} → <span>${after}</span>（扣 ${item.qty}）${after < 10 ? ' ⚠️' : ''}` : '未找到此SKU'}
+        ${found ? `${beforeQty} → <span>${after}</span>（扣 ${item.qty}）${after < 10 ? ' ⚠️' : ''}` : '未找到此SKU'}
       </span>
     </div>`;
   }).join('');
@@ -82,10 +86,20 @@ function confirmDeduct() {
   const changes = [];
   pendingDeductions.forEach(({ sku, qty, shelf }) => {
     if (inventory[sku] !== undefined) {
-      const before = inventory[sku].qty;
-      inventory[sku].qty = Math.max(0, before - qty);
-      if (shelf && !inventory[sku].shelves.includes(shelf)) inventory[sku].shelves.push(shelf);
-      changes.push({ sku, before, after: inventory[sku].qty, deducted: qty, shelves: inventory[sku].shelves });
+      const d = inventory[sku];
+      if (!d.locations) d.locations = {};
+      if (shelf) {
+        if (d.locations[shelf] === undefined) d.locations[shelf] = 0;
+        const before = d.locations[shelf];
+        d.locations[shelf] = Math.max(0, before - qty);
+        if (!d.shelves.includes(shelf)) d.shelves.push(shelf);
+        recalcSkuQty(sku);
+        changes.push({ sku, before, after: d.locations[shelf], deducted: qty, shelves: [shelf] });
+      } else {
+        const before = d.qty;
+        d.qty = Math.max(0, before - qty);
+        changes.push({ sku, before, after: d.qty, deducted: qty, shelves: d.shelves });
+      }
     }
   });
   save();

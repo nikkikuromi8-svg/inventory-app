@@ -1,7 +1,14 @@
 // ── 庫存導出 & 清空 ──
 function exportInventory() {
   const rows = [['SKU', '庫存數量', '貨架號']];
-  Object.entries(inventory).forEach(([sku, d]) => rows.push([sku, d.qty, d.shelves.join(', ')]));
+  Object.entries(inventory).forEach(([sku, d]) => {
+    const locs = d.locations || {};
+    if (Object.keys(locs).length) {
+      Object.entries(locs).forEach(([shelf, qty]) => rows.push([sku, qty, shelf]));
+    } else {
+      rows.push([sku, d.qty, (d.shelves || []).join(', ')]);
+    }
+  });
   const ws = XLSX.utils.aoa_to_sheet(rows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '庫存');
@@ -30,10 +37,18 @@ function renderInventory() {
   container.innerHTML = `<table>
     <thead><tr><th>SKU</th><th>庫存數量</th><th>貨架號</th><th>狀態</th><th>操作</th></tr></thead>
     <tbody>${items.map(([sku, d]) => {
-      const low = d.qty < 10;
-      const shelfHtml = d.shelves.length
-        ? d.shelves.map(s => `<span class="shelf-tag">${s}</span>`).join('')
-        : `<span class="shelf-tag empty">未設定</span>`;
+      const low = getLowStockRows().some(row => row.sku === sku);
+      let shelfHtml;
+      const locs = d.locations || {};
+      const shelves = Object.keys(locs).length ? Object.keys(locs) : d.shelves;
+      if (!shelves.length) {
+        shelfHtml = `<span class="shelf-tag empty">未設定</span>`;
+      } else if (!low || shelves.length <= 2) {
+        shelfHtml = shelves.map(s => `<span class="shelf-tag">${s}${locs[s] !== undefined ? `：${locs[s]}` : ''}</span>`).join('');
+      } else {
+        shelfHtml = shelves.slice(0, 2).map(s => `<span class="shelf-tag">${s}${locs[s] !== undefined ? `：${locs[s]}` : ''}</span>`).join('')
+          + `<span class="shelf-tag empty">+${shelves.length - 2}</span>`;
+      }
       return `<tr class="${low ? 'low-stock' : ''}">
         <td style="font-family:monospace;font-weight:500">${sku}</td>
         <td><strong>${d.qty}</strong></td>
@@ -64,7 +79,7 @@ function saveModal() {
   const shelvesRaw = document.getElementById('modal-shelves').value;
   const shelves = shelvesRaw.split(/[,，;；\s]+/).map(s => s.trim()).filter(Boolean);
   const old = inventory[editingSku].qty;
-  inventory[editingSku] = { qty, shelves };
+  inventory[editingSku] = { qty, shelves, locations: {} };
   save(); renderInventory();
   addLog('手動修改', [{ sku: editingSku, before: old, after: qty, deducted: old - qty, shelves }]);
   document.getElementById('edit-modal').style.display = 'none';
@@ -74,22 +89,33 @@ function saveModal() {
 function updateStats() {
   const vals = Object.values(inventory);
   document.getElementById('stat-total').textContent = vals.length;
-  document.getElementById('stat-low').textContent = vals.filter(v => v.qty < 10).length;
+  document.getElementById('stat-low').textContent = getLowStockRows().length;
   document.getElementById('stat-units').textContent = vals.reduce((a, b) => a + b.qty, 0);
 }
 
+function getLowStockRows() {
+  return Object.entries(inventory).flatMap(([sku, d]) => {
+    const locs = d.locations || {};
+    if (Object.keys(locs).length === 0) {
+      return d.qty < 10 ? [{ sku, shelf: (d.shelves || []).join('、') || '未設定貨架', qty: d.qty }] : [];
+    }
+    return Object.entries(locs)
+      .filter(([, qty]) => qty < 10)
+      .map(([shelf, qty]) => ({ sku, shelf, qty }));
+  });
+}
+
 function renderAlerts() {
-  const low = Object.entries(inventory).filter(([, d]) => d.qty < 10);
+  const low = getLowStockRows();
   const container = document.getElementById('alert-container');
   if (low.length === 0) { container.innerHTML = ''; return; }
-  const rows = low.map(([sku, d]) => {
-    const shelfStr = d.shelves.length ? d.shelves.join('、') : '未設定貨架';
-    return `<tr><td>${sku}</td><td>剩 ${d.qty} 件</td><td>📍 ${shelfStr}</td></tr>`;
-  }).join('');
+  const rows = low.map(d =>
+    `<tr><td>${d.sku}</td><td>剩 ${d.qty} 件</td><td>📍 ${d.shelf}</td></tr>`
+  ).join('');
   container.innerHTML = `<div class="alert-banner">
     <div class="alert-icon">⚠️</div>
     <div style="width:100%">
-      <h3>需要合併庫存 / 清點（${low.length} 個SKU庫存不足）</h3>
+      <h3>需要合併庫存 / 清點（${low.length} 個庫位庫存不足）</h3>
       <table class="alert-table">${rows}</table>
     </div>
   </div>`;

@@ -103,12 +103,19 @@ function doImport(data, headerRow, skuCol, qtyCol, shelfCol) {
     const qty = qtyCol >= 0 ? (parseInt(data[i][qtyCol]) || 0) : 0;
     const shelfRaw = shelfCol >= 0 ? String(data[i][shelfCol] || '').trim() : '';
     const shelves = shelfRaw ? shelfRaw.split(/[,，;；\s]+/).map(s => s.trim()).filter(Boolean) : [];
-    if (inventory[sku]) {
-      if (qtyCol >= 0) inventory[sku].qty = qty;
-      shelves.forEach(s => { if (!inventory[sku].shelves.includes(s)) inventory[sku].shelves.push(s); });
-    } else {
-      inventory[sku] = { qty, shelves };
+    if (!inventory[sku]) inventory[sku] = { qty: 0, shelves: [], locations: {} };
+    if (!inventory[sku].locations) inventory[sku].locations = {};
+
+    if (shelves.length > 0) {
+      shelves.forEach(s => { inventory[sku].locations[s] = qty; });
+      recalcSkuQty(sku);
+    } else if (qtyCol >= 0) {
+      inventory[sku].qty = qty;
     }
+    inventory[sku].shelves = Array.from(new Set([
+      ...(inventory[sku].shelves || []),
+      ...shelves
+    ]));
     imported++;
   }
   save(); renderInventory(); updateStats();
