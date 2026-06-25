@@ -18,7 +18,7 @@ function renderLog() {
       const shelfStr = c.shelves && c.shelves.length ? ` [${c.shelves.join('/')}]` : '';
       return `${c.sku}${shelfStr}: ${c.before}→${c.after}（-${c.deducted}）`;
     }).join('、');
-    const orderNo = log.orderNo ? ` · 揀貨單號：${log.orderNo}` : '';
+    const orderNo = log.orderNo ? `<span class="log-order-no">揀貨單號：${log.orderNo}</span>` : '';
     return `<div class="log-item">
       <div class="log-time">${timeStr} · ${log.action}${orderNo}</div>
       <div class="log-detail">${detail}</div>

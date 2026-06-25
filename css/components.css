@@ -72,6 +72,16 @@ tr:hover td { background: #f0f7ff !important; transition: background 0.15s; }
   display: flex; align-items: center; gap: 6px;
 }
 .log-time::before { content: '●'; color: #d1d5db; font-size: 6px; }
+.log-order-no {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 13px;
+  font-weight: 800;
+  margin-left: 6px;
+}
 .log-detail { font-size: 13px; color: #374151; padding-left: 12px; }
 
 /* ── File Input ── */
