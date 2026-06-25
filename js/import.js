@@ -15,23 +15,20 @@ function importInventory(event) {
       if (data.length === 0) { alert('文件是空的'); return; }
 
       let skuCol = -1, qtyCol = -1, shelfCol = -1, headerRow = -1;
-      for (let r = 0; r < Math.min(6, data.length); r++) {
+      for (let r = 0; r < Math.min(30, data.length); r++) {
         const row = data[r].map(c => String(c || '').toLowerCase().trim());
         let foundSku = -1, foundQty = -1, foundShelf = -1;
         for (let c = 0; c < row.length; c++) {
-          if (row[c].includes('sku')) foundSku = c;
-          if (row[c].includes('數量') || row[c].includes('数量') || row[c].includes('qty') ||
-              row[c].includes('quantity') || row[c].includes('庫存') || row[c].includes('库存') ||
-              row[c].includes('在庫')) foundQty = c;
-          if (row[c].includes('貨架') || row[c].includes('货架') || row[c].includes('shelf') ||
-              row[c].includes('位置') || row[c].includes('location') || row[c].includes('儲位')) foundShelf = c;
+          if (isSkuHeader(row[c])) foundSku = c;
+          if (isTotalStockHeader(row[c])) foundQty = c;
+          if (isLocationHeader(row[c])) foundShelf = c;
         }
-        if (foundSku >= 0 && foundQty >= 0) {
+        if (foundSku >= 0 && foundQty >= 0 && foundShelf >= 0) {
           skuCol = foundSku; qtyCol = foundQty; shelfCol = foundShelf; headerRow = r; break;
         }
       }
 
-      if (skuCol >= 0 && qtyCol >= 0) {
+      if (skuCol >= 0 && qtyCol >= 0 && shelfCol >= 0) {
         doImport(data, headerRow, skuCol, qtyCol, shelfCol);
       } else {
         _importData = data;
@@ -46,7 +43,7 @@ function importInventory(event) {
 }
 
 function showColumnPicker(data) {
-  const preview = data.slice(0, 4);
+  const preview = data.slice(0, 15);
   const colCount = Math.max(...preview.map(r => r.length));
   const cols = Array.from({ length: colCount }, (_, i) => {
     const samples = preview.map(r => String(r[i] || '').trim()).filter(Boolean).slice(0, 3).join(' / ');
@@ -58,7 +55,7 @@ function showColumnPicker(data) {
   modal.id = 'col-picker-modal';
   modal.innerHTML = `<div class="modal" onclick="event.stopPropagation()" style="width:500px">
     <h3>請選擇對應欄位</h3>
-    <p style="font-size:13px;color:#6b7280;margin-bottom:16px;">系統無法自動識別欄位，請手動指定</p>
+    <p style="font-size:13px;color:#6b7280;margin-bottom:16px;">系統只會導入 SKU、庫位、總庫存，其他欄位會忽略</p>
     <div style="overflow-x:auto;margin-bottom:16px;">
       <table style="font-size:12px;border-collapse:collapse;width:100%">
         <thead><tr>${Array.from({length:colCount},(_,i)=>`<th style="padding:4px 8px;background:#f9fafb;border:1px solid #e5e7eb">欄${i+1}</th>`).join('')}</tr></thead>
@@ -67,9 +64,9 @@ function showColumnPicker(data) {
     </div>
     <label>SKU 欄 <span style="color:#ef4444">*</span></label>
     <select id="cp-sku" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;margin-bottom:10px">${cols}</select>
-    <label>庫存數量欄 <span style="color:#ef4444">*</span></label>
+    <label>總庫存欄 <span style="color:#ef4444">*</span></label>
     <select id="cp-qty" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;margin-bottom:10px"><option value="-1">— 不選 —</option>${cols}</select>
-    <label>貨架號欄 <span style="color:#6b7280;font-weight:400">（選填）</span></label>
+    <label>庫位欄 <span style="color:#ef4444">*</span></label>
     <select id="cp-shelf" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;margin-bottom:4px"><option value="-1">— 不選 —</option>${cols}</select>
     <label style="display:flex;align-items:center;gap:6px;margin-top:10px;cursor:pointer">
       <input type="checkbox" id="cp-has-header" checked>
@@ -88,7 +85,7 @@ function confirmColumnPicker() {
   const qtyCol = parseInt(document.getElementById('cp-qty').value);
   const shelfCol = parseInt(document.getElementById('cp-shelf').value);
   const hasHeader = document.getElementById('cp-has-header').checked;
-  if (skuCol < 0) { alert('請選擇SKU欄'); return; }
+  if (skuCol < 0 || qtyCol < 0 || shelfCol < 0) { alert('請選擇 SKU、總庫存、庫位三個欄位'); return; }
   document.getElementById('col-picker-modal').remove();
   doImport(_importData, hasHeader ? 0 : -1, skuCol, qtyCol, shelfCol);
   _importData = null;
@@ -101,7 +98,7 @@ function doImport(data, headerRow, skuCol, qtyCol, shelfCol) {
   for (let i = startRow; i < data.length; i++) {
     const sku = String(data[i][skuCol] || '').trim();
     if (!sku) continue;
-    const qty = qtyCol >= 0 ? (parseInt(data[i][qtyCol]) || 0) : 0;
+    const qty = qtyCol >= 0 ? parseQty(data[i][qtyCol]) : 0;
     const shelfRaw = shelfCol >= 0 ? String(data[i][shelfCol] || '').trim() : '';
     const shelves = shelfRaw ? shelfRaw.split(/[,，;；\s]+/).map(s => s.trim()).filter(Boolean) : [];
     if (!nextInventory[sku]) nextInventory[sku] = { qty: 0, shelves: [], locations: {} };
@@ -121,4 +118,29 @@ function doImport(data, headerRow, skuCol, qtyCol, shelfCol) {
   Object.keys(inventory).forEach(recalcSkuQty);
   save(); renderInventory(); updateStats();
   alert(`成功導入 ${imported} 行庫存，已用新文件覆蓋舊庫存`);
+}
+
+function isSkuHeader(text) {
+  const t = normalizeHeader(text);
+  return t === 'sku' || t.includes('商品sku') || t.includes('seller sku');
+}
+
+function isLocationHeader(text) {
+  const t = normalizeHeader(text);
+  return ['庫位', '库位', '貨位', '货位', '儲位', '储位', 'location'].some(k => t.includes(k));
+}
+
+function isTotalStockHeader(text) {
+  const t = normalizeHeader(text);
+  return ['總庫存', '总库存', 'total stock', 'total inventory'].some(k => t.includes(k));
+}
+
+function normalizeHeader(text) {
+  return String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function parseQty(value) {
+  const cleaned = String(value || '').replace(/,/g, '').trim();
+  const qty = parseInt(cleaned, 10);
+  return Number.isFinite(qty) ? qty : 0;
 }
